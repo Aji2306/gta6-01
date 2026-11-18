@@ -32,6 +32,9 @@ class Game {
       horn: false
     };
 
+    // Touch controls (detected in initTouch; desktop stays untouched)
+    this.isTouch = false;
+
     this.initRenderer();
     this.initScene();
     this.initWorld();
@@ -190,10 +193,11 @@ class Game {
       if (code === 'KeyH') this.input.horn = false;
     });
 
-    // Pointer Lock & Camera Rotation
+    // Pointer Lock & Camera Rotation (desktop mouse only)
     this.canvas.addEventListener('click', () => {
+      if (this.isTouch) return;
       if (this.isPlaying && !this.isPaused) {
-        this.canvas.requestPointerLock?.();
+        this.lockPointer();
       }
     });
 
@@ -205,19 +209,161 @@ class Game {
 
     // Attack / Fire
     window.addEventListener('mousedown', (e) => {
-      if (e.button === 0 && this.isPlaying && !this.isPaused) {
-        audio.ensureContext();
-        this.combatManager.attack(
-          (crime, stars) => this.policeManager.reportCrime(crime, stars),
-          (ped, dropCash) => {
-            this.pedManager.spawnCashDrop(ped.position, dropCash, (amt) => {
-              this.player.addCash(amt);
-              this.hud.showToast(`+$${amt} Cash Collected`, 2500);
-            });
-            this.missionManager.recordKill();
-          }
-        );
+      if (e.button === 0) {
+        this.doAttack();
       }
+    });
+
+    // Touch controls (virtual joystick, camera drag, action buttons)
+    this.initTouch();
+  }
+
+  // Request pointer lock on desktop only; no-op on touch (no console errors).
+  lockPointer() {
+    if (this.isTouch) return;
+    try {
+      const p = this.canvas.requestPointerLock?.();
+      if (p && typeof p.catch === 'function') p.catch(() => {});
+    } catch (err) { /* pointer lock unavailable */ }
+  }
+
+  // Single attack entry point: mouse click and the touch ATTACK button
+  // both run exactly this code path.
+  doAttack() {
+    if (!this.isPlaying || this.isPaused) return;
+    audio.ensureContext();
+    this.combatManager.attack(
+      (crime, stars) => this.policeManager.reportCrime(crime, stars),
+      (ped, dropCash) => {
+        this.pedManager.spawnCashDrop(ped.position, dropCash, (amt) => {
+          this.player.addCash(amt);
+          this.hud.showToast(`+$${amt} Cash Collected`, 2500);
+        });
+        this.missionManager.recordKill();
+      }
+    );
+  }
+
+  initTouch() {
+    this.isTouch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+    if (!this.isTouch) return;
+    document.body.classList.add('touch');
+
+    const controls = document.getElementById('touch-controls');
+    const joystick = document.getElementById('touch-joystick');
+    const stick = document.getElementById('touch-stick');
+    const btnEnter = document.getElementById('touch-btn-enter');
+    const btnAttack = document.getElementById('touch-btn-attack');
+    const btnPause = document.getElementById('touch-btn-pause');
+    if (!controls || !joystick || !stick || !btnEnter || !btnAttack || !btnPause) return;
+
+    // Long-press must not open a context menu over the game.
+    controls.addEventListener('contextmenu', (e) => e.preventDefault());
+    this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
+    // --- Virtual joystick: drives the SAME boolean input as WASD ---
+    // Push up = forward (W), down = backward (S), left/right = strafe (A/D).
+    // Dead zone 0.28 so a resting thumb never moves the player.
+    const JOY_RADIUS = 36; // max knob travel in px
+    const DEAD_ZONE = 0.28;
+    let joyPointerId = null;
+
+    const setJoystickInput = (nx, ny) => {
+      this.input.forward = ny < -DEAD_ZONE;
+      this.input.backward = ny > DEAD_ZONE;
+      this.input.left = nx < -DEAD_ZONE;
+      this.input.right = nx > DEAD_ZONE;
+    };
+
+    const moveStick = (e) => {
+      const rect = joystick.getBoundingClientRect();
+      const cx = rect.left + rect.width / 2;
+      const cy = rect.top + rect.height / 2;
+      let dx = e.clientX - cx;
+      let dy = e.clientY - cy;
+      const len = Math.hypot(dx, dy);
+      if (len > JOY_RADIUS) {
+        dx = (dx / len) * JOY_RADIUS;
+        dy = (dy / len) * JOY_RADIUS;
+      }
+      stick.style.transform = `translate(${dx}px, ${dy}px)`;
+      setJoystickInput(dx / JOY_RADIUS, dy / JOY_RADIUS);
+    };
+
+    const resetJoystick = () => {
+      joyPointerId = null;
+      stick.style.transform = 'translate(0px, 0px)';
+      setJoystickInput(0, 0);
+    };
+
+    joystick.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      if (joyPointerId !== null) return;
+      joyPointerId = e.pointerId;
+      try { joystick.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+      moveStick(e);
+    });
+    joystick.addEventListener('pointermove', (e) => {
+      if (e.pointerId !== joyPointerId) return;
+      e.preventDefault();
+      moveStick(e);
+    });
+    joystick.addEventListener('pointerup', (e) => {
+      if (e.pointerId === joyPointerId) resetJoystick();
+    });
+    joystick.addEventListener('pointercancel', (e) => {
+      if (e.pointerId === joyPointerId) resetJoystick();
+    });
+
+    // --- Camera: drag on the right ~55% of the screen ---
+    // Same call as pointer-lock mousemove (player.rotateCamera), so the
+    // look speed matches the mouse exactly. preventDefault() on pointerdown
+    // also suppresses the synthetic mousedown/click (no accidental attack
+    // or pointer-lock attempt from a touch drag).
+    let camPointerId = null;
+    let camLastX = 0;
+    let camLastY = 0;
+
+    this.canvas.addEventListener('pointerdown', (e) => {
+      if (e.pointerType !== 'touch') return;
+      e.preventDefault();
+      if (!this.isPlaying || this.isPaused) return;
+      if (camPointerId !== null) return;
+      if (e.clientX < window.innerWidth * 0.45) return;
+      camPointerId = e.pointerId;
+      camLastX = e.clientX;
+      camLastY = e.clientY;
+      try { this.canvas.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+    });
+    this.canvas.addEventListener('pointermove', (e) => {
+      if (e.pointerId !== camPointerId) return;
+      e.preventDefault();
+      if (!this.isPlaying || this.isPaused) return;
+      this.player.rotateCamera(e.clientX - camLastX, e.clientY - camLastY);
+      camLastX = e.clientX;
+      camLastY = e.clientY;
+    });
+    const endCamDrag = (e) => {
+      if (e.pointerId === camPointerId) camPointerId = null;
+    };
+    this.canvas.addEventListener('pointerup', endCamDrag);
+    this.canvas.addEventListener('pointercancel', endCamDrag);
+
+    // --- Action buttons: same handlers as the keyboard keys ---
+    btnEnter.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      this.handleVehicleInteract(); // same as F / E
+    });
+    btnAttack.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      this.doAttack(); // same as left mouse click
+    });
+    btnPause.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      this.togglePause(); // same as Esc / P
     });
   }
 
@@ -253,7 +399,7 @@ class Game {
         SaveSystem.load(this.player, this.missionManager, this.combatManager);
         startScreen.classList.add('hidden');
         this.isPlaying = true;
-        this.canvas.requestPointerLock?.();
+        this.lockPointer();
         audio.startRadio();
       });
     }
@@ -263,7 +409,7 @@ class Game {
         audio.ensureContext();
         startScreen.classList.add('hidden');
         this.isPlaying = true;
-        this.canvas.requestPointerLock?.();
+        this.lockPointer();
         audio.startRadio();
       });
     }
@@ -313,7 +459,7 @@ class Game {
       document.exitPointerLock?.();
     } else {
       pauseScreen.classList.add('hidden');
-      this.canvas.requestPointerLock?.();
+      this.lockPointer();
     }
   }
 
@@ -467,6 +613,22 @@ class Game {
       }
 
       this.hud.update(dt);
+    }
+
+    // Touch controls: visible only while actually playing (touch only).
+    // The ENTER button label follows the vehicle state (ENTER / EXIT).
+    if (this.isTouch) {
+      const playing = this.isPlaying && !this.isPaused;
+      if (playing !== this._touchPlaying) {
+        this._touchPlaying = playing;
+        document.body.classList.toggle('playing', playing);
+      }
+      const inVehicle = !!this.player.inVehicle;
+      if (inVehicle !== this._touchInVehicle) {
+        this._touchInVehicle = inVehicle;
+        const btnEnter = document.getElementById('touch-btn-enter');
+        if (btnEnter) btnEnter.textContent = inVehicle ? 'EXIT' : 'ENTER';
+      }
     }
 
     this.renderer.render(this.scene, this.camera);

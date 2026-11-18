@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Solana Shores: Vice Syndicate</title>
   <style>
     * {
@@ -19,12 +19,16 @@
       background: #080b12;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
       color: #ffffff;
+      touch-action: none;
+      overscroll-behavior: none;
+      -webkit-tap-highlight-color: transparent;
     }
     #game-canvas {
       width: 100%;
       height: 100%;
       display: block;
       outline: none;
+      touch-action: none;
     }
 
     /* HUD Layout */
@@ -418,6 +422,177 @@
       text-shadow: 0 0 30px rgba(30, 136, 229, 0.9);
       margin-bottom: 12px;
     }
+
+    /* Touch controls: shown only on touch devices while playing */
+    #touch-controls {
+      position: absolute;
+      inset: 0;
+      z-index: 50;
+      pointer-events: none;
+      display: none;
+    }
+    body.touch.playing #touch-controls {
+      display: block;
+    }
+    #touch-joystick {
+      position: absolute;
+      left: 20px;
+      bottom: 24px;
+      width: 128px;
+      height: 128px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.08);
+      border: 2px solid rgba(255, 255, 255, 0.35);
+      pointer-events: auto;
+      touch-action: none;
+    }
+    #touch-stick {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 56px;
+      height: 56px;
+      margin: -28px 0 0 -28px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.35);
+      border: 2px solid rgba(255, 255, 255, 0.6);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+    }
+    .touch-btn {
+      position: absolute;
+      pointer-events: auto;
+      touch-action: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      background: rgba(10, 16, 26, 0.55);
+      border: 2px solid rgba(255, 255, 255, 0.4);
+      color: #fff;
+      font-weight: 900;
+      letter-spacing: 1px;
+      text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+      padding: 0;
+      cursor: pointer;
+    }
+    .touch-btn:active {
+      background: rgba(255, 51, 102, 0.7);
+    }
+    #touch-btn-attack {
+      right: 20px;
+      bottom: 24px;
+      width: 76px;
+      height: 76px;
+      font-size: 13px;
+      border-color: rgba(255, 213, 79, 0.7);
+    }
+    #touch-btn-enter {
+      right: 112px;
+      bottom: 96px;
+      width: 60px;
+      height: 60px;
+      font-size: 11px;
+    }
+    #touch-btn-pause {
+      right: 16px;
+      top: 190px;
+      width: 48px;
+      height: 48px;
+      font-size: 16px;
+      border-radius: 8px;
+    }
+
+    /* Small screens / coarse pointers: shrink HUD, move minimap & speedo
+       clear of the joystick (bottom-left) and buttons (bottom-right). */
+    @media (pointer: coarse), (max-width: 700px) {
+      #hud {
+        padding: 10px;
+      }
+      .hud-top-left {
+        max-width: 180px;
+        gap: 6px;
+      }
+      .city-logo {
+        font-size: 12px;
+        letter-spacing: 1px;
+      }
+      .star-icon {
+        font-size: 16px;
+      }
+      .hud-top-right {
+        top: 10px;
+        right: 10px;
+      }
+      .cash-display {
+        font-size: 19px;
+      }
+      .weapon-card {
+        padding: 4px 8px;
+        gap: 8px;
+      }
+      .weapon-name {
+        font-size: 11px;
+      }
+      .ammo-count {
+        font-size: 13px;
+      }
+      .hud-center {
+        top: 104px;
+        width: 94vw;
+        max-width: 94vw;
+      }
+      .mission-banner {
+        padding: 6px 12px;
+      }
+      .mission-title {
+        font-size: 10px;
+      }
+      .mission-desc {
+        font-size: 12px;
+      }
+      .minimap-wrapper {
+        position: absolute;
+        left: 12px;
+        bottom: 168px;
+        width: 104px;
+        height: 104px;
+      }
+      .speedo-card {
+        position: absolute;
+        right: 12px;
+        bottom: 178px;
+        min-width: 84px;
+        padding: 6px 10px;
+      }
+      .speed-val {
+        font-size: 24px;
+      }
+      #interact-prompt {
+        bottom: 300px;
+        font-size: 12px;
+      }
+      .title-banner {
+        font-size: 30px;
+        letter-spacing: 2px;
+      }
+      .title-sub {
+        font-size: 12px;
+        letter-spacing: 4px;
+      }
+      #wasted-banner, #busted-banner {
+        font-size: 44px;
+        letter-spacing: 4px;
+      }
+      .controls-panel {
+        font-size: 11px;
+        line-height: 1.6;
+        padding: 10px 14px;
+      }
+      .screen-overlay {
+        padding: 12px;
+      }
+    }
   </style>
 </head>
 <body>
@@ -480,6 +655,14 @@
         <div class="gear-display" id="gear-val">GEAR 1</div>
       </div>
     </div>
+  </div>
+
+  <!-- Touch Controls (visible only on touch devices while playing) -->
+  <div id="touch-controls">
+    <div id="touch-joystick"><div id="touch-stick"></div></div>
+    <button class="touch-btn" id="touch-btn-enter">ENTER</button>
+    <button class="touch-btn" id="touch-btn-attack">ATTACK</button>
+    <button class="touch-btn" id="touch-btn-pause">II</button>
   </div>
 
   <!-- Start Screen Overlay -->
