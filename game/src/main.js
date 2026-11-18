@@ -264,7 +264,7 @@ class Game {
     // --- Virtual joystick: drives the SAME boolean input as WASD ---
     // Push up = forward (W), down = backward (S), left/right = strafe (A/D).
     // Dead zone 0.28 so a resting thumb never moves the player.
-    const JOY_RADIUS = 36; // max knob travel in px
+    const JOY_RADIUS = 46; // max knob travel in px (matches 168px base, 76px knob)
     const DEAD_ZONE = 0.28;
     let joyPointerId = null;
 

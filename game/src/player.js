@@ -152,11 +152,14 @@ export class Player {
       moveX /= len;
       moveZ /= len;
 
-      // Rotate input by camera yaw
+      // Rotate input by camera yaw: local forward (-Z) must map to the
+      // camera's view direction (sin yaw, cos yaw) and local right (+X)
+      // to screen-right (-cos yaw, sin yaw), so pushing up walks the
+      // player away from the camera (up-screen), not toward it.
       const cosY = Math.cos(this.camYaw);
       const sinY = Math.sin(this.camYaw);
-      const worldMoveX = moveX * cosY - moveZ * sinY;
-      const worldMoveZ = moveX * sinY + moveZ * cosY;
+      const worldMoveX = -moveX * cosY - moveZ * sinY;
+      const worldMoveZ = moveX * sinY - moveZ * cosY;
 
       const speed = input.sprint ? this.runSpeed : this.walkSpeed;
       this.velocity.x = worldMoveX * speed;
