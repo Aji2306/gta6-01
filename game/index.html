@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Solana Shores: Vice Syndicate</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #080b12;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      color: #ffffff;
+    }
+    #game-canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+      outline: none;
+    }
+
+    /* HUD Layout */
+    #hud {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 16px;
+    }
+
+    /* Top Left: Vital Stats & Stars */
+    .hud-top-left {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-width: 280px;
+    }
+    .hud-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .city-logo {
+      font-size: 15px;
+      font-weight: 900;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: #ff3366;
+      text-shadow: 0 0 10px rgba(255, 51, 102, 0.6), 0 2px 4px rgba(0, 0, 0, 0.8);
+    }
+    .wanted-stars {
+      display: flex;
+      gap: 4px;
+    }
+    .star-icon {
+      font-size: 22px;
+      color: rgba(255, 255, 255, 0.2);
+      filter: drop-shadow(0 2px 4px rgba(0,0,0,0.8));
+      transition: color 0.15s, transform 0.15s;
+    }
+    .star-icon.active {
+      color: #ffcc00;
+      text-shadow: 0 0 8px #ffcc00;
+      animation: pulseStar 0.8s ease-in-out infinite alternate;
+    }
+    @keyframes pulseStar {
+      from { transform: scale(1); filter: brightness(1); }
+      to { transform: scale(1.15); filter: brightness(1.3); }
+    }
+
+    .bar-container {
+      background: rgba(0, 0, 0, 0.7);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 4px;
+      padding: 3px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+    }
+    .bar-fill {
+      height: 10px;
+      border-radius: 2px;
+      transition: width 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .health-bar {
+      background: linear-gradient(90deg, #e53935, #00e676);
+    }
+    .armor-bar {
+      background: linear-gradient(90deg, #1e88e5, #00e5ff);
+      margin-top: 3px;
+    }
+
+    /* Top Right: Cash & Weapon info */
+    .hud-top-right {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 6px;
+    }
+    .cash-display {
+      font-size: 26px;
+      font-weight: 900;
+      color: #69f0ae;
+      letter-spacing: 1px;
+      text-shadow: 0 2px 8px rgba(0, 255, 128, 0.4), 0 2px 4px #000;
+      font-family: monospace;
+    }
+    .weapon-card {
+      background: rgba(10, 16, 26, 0.75);
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      border-radius: 6px;
+      padding: 6px 12px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
+    }
+    .weapon-name {
+      font-size: 13px;
+      font-weight: 700;
+      color: #ffffff;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    .ammo-count {
+      font-size: 16px;
+      font-weight: 800;
+      font-family: monospace;
+      color: #ffd54f;
+    }
+
+    /* Center: Mission Banner & Toasts */
+    .hud-center {
+      position: absolute;
+      top: 70px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      max-width: 600px;
+      text-align: center;
+    }
+    .mission-banner {
+      background: rgba(0, 0, 0, 0.85);
+      border-left: 4px solid #ffcc00;
+      border-right: 4px solid #ffcc00;
+      padding: 8px 24px;
+      border-radius: 4px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.8);
+      backdrop-filter: blur(4px);
+    }
+    .mission-title {
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 2px;
+      color: #ffcc00;
+      text-transform: uppercase;
+    }
+    .mission-desc {
+      font-size: 14px;
+      font-weight: 600;
+      color: #ffffff;
+      margin-top: 2px;
+    }
+    .toast-container {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .toast-msg {
+      background: rgba(20, 25, 40, 0.9);
+      border: 1px solid rgba(0, 229, 255, 0.4);
+      color: #e0f7fa;
+      font-size: 12px;
+      font-weight: 700;
+      padding: 6px 14px;
+      border-radius: 4px;
+      animation: fadeInToast 0.3s ease-out;
+    }
+    @keyframes fadeInToast {
+      from { opacity: 0; transform: translateY(-8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Bottom: Minimap on left, Speedometer on right */
+    .hud-bottom {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      width: 100%;
+    }
+    .minimap-wrapper {
+      position: relative;
+      width: 160px;
+      height: 160px;
+      border-radius: 50%;
+      overflow: hidden;
+      border: 3px solid rgba(255, 255, 255, 0.4);
+      box-shadow: 0 6px 16px rgba(0, 0, 0, 0.8), inset 0 0 10px rgba(0, 0, 0, 0.7);
+      background: #111a24;
+    }
+    #minimap-canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    .minimap-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      pointer-events: none;
+      box-shadow: inset 0 0 12px rgba(0,0,0,0.6);
+      border: 1px solid rgba(0, 229, 255, 0.2);
+    }
+    .speedo-card {
+      background: rgba(10, 15, 25, 0.85);
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      border-radius: 8px;
+      padding: 10px 18px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      box-shadow: 0 6px 16px rgba(0, 0, 0, 0.7);
+      min-width: 110px;
+    }
+    .speed-val {
+      font-size: 32px;
+      font-weight: 900;
+      color: #ffffff;
+      font-family: monospace;
+      line-height: 1;
+    }
+    .speed-unit {
+      font-size: 11px;
+      font-weight: 800;
+      color: #ff3366;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      margin-top: 4px;
+    }
+    .gear-display {
+      font-size: 11px;
+      color: #90caf9;
+      font-weight: 700;
+      margin-top: 2px;
+    }
+
+    /* Reticle / Crosshair for shooting */
+    #crosshair {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 12px;
+      height: 12px;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      display: none;
+    }
+    #crosshair::before, #crosshair::after {
+      content: '';
+      position: absolute;
+      background: rgba(255, 255, 255, 0.85);
+      box-shadow: 0 0 4px rgba(0, 0, 0, 0.8);
+    }
+    #crosshair::before {
+      top: 5px;
+      left: 0;
+      width: 12px;
+      height: 2px;
+    }
+    #crosshair::after {
+      top: 0;
+      left: 5px;
+      width: 2px;
+      height: 12px;
+    }
+
+    /* Interaction Prompt */
+    #interact-prompt {
+      position: absolute;
+      bottom: 180px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0, 0, 0, 0.85);
+      border: 1px solid #ffd54f;
+      color: #fff;
+      padding: 6px 16px;
+      border-radius: 4px;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.8);
+      display: none;
+    }
+
+    /* Modals / Screens */
+    .screen-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: radial-gradient(circle at center, rgba(10, 15, 30, 0.88), rgba(4, 6, 12, 0.98));
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      padding: 20px;
+      backdrop-filter: blur(6px);
+    }
+    .screen-overlay.hidden {
+      display: none !important;
+    }
+    .title-banner {
+      font-size: 42px;
+      font-weight: 900;
+      letter-spacing: 4px;
+      text-transform: uppercase;
+      color: #ffffff;
+      text-shadow: 0 0 20px rgba(255, 51, 102, 0.8), 0 4px 10px rgba(0,0,0,0.9);
+      margin-bottom: 4px;
+      text-align: center;
+    }
+    .title-sub {
+      font-size: 16px;
+      font-weight: 800;
+      letter-spacing: 6px;
+      color: #ff3366;
+      text-transform: uppercase;
+      margin-bottom: 24px;
+      text-align: center;
+    }
+    .menu-box {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      width: 100%;
+      max-width: 320px;
+    }
+    .btn {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      color: #ffffff;
+      font-size: 15px;
+      font-weight: 800;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      padding: 12px 20px;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.15s ease-in-out;
+      text-align: center;
+    }
+    .btn:hover {
+      background: #ff3366;
+      border-color: #ff3366;
+      transform: translateY(-2px);
+      box-shadow: 0 6px 16px rgba(255, 51, 102, 0.5);
+    }
+    .btn-secondary {
+      background: rgba(0, 0, 0, 0.4);
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+    .btn-secondary:hover {
+      background: rgba(0, 229, 255, 0.3);
+      border-color: #00e5ff;
+      box-shadow: 0 6px 16px rgba(0, 229, 255, 0.4);
+    }
+    .controls-panel {
+      margin-top: 24px;
+      background: rgba(0, 0, 0, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 6px;
+      padding: 14px 20px;
+      max-width: 480px;
+      font-size: 12px;
+      line-height: 1.8;
+      color: #b0bec5;
+    }
+    .controls-panel strong {
+      color: #ffd54f;
+    }
+
+    /* Wasted / Busted screens */
+    #wasted-banner {
+      font-size: 64px;
+      font-weight: 900;
+      letter-spacing: 8px;
+      color: #e53935;
+      text-shadow: 0 0 30px rgba(229, 57, 53, 0.9);
+      margin-bottom: 12px;
+    }
+    #busted-banner {
+      font-size: 64px;
+      font-weight: 900;
+      letter-spacing: 8px;
+      color: #1e88e5;
+      text-shadow: 0 0 30px rgba(30, 136, 229, 0.9);
+      margin-bottom: 12px;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="game-canvas"></canvas>
+
+  <!-- Crosshair for aiming & shooting -->
+  <div id="crosshair"></div>
+
+  <!-- In-game Action Prompt -->
+  <div id="interact-prompt">[F] Enter Vehicle</div>
+
+  <!-- HUD Layer -->
+  <div id="hud">
+    <!-- Top Left -->
+    <div class="hud-top-left">
+      <div class="hud-header">
+        <div class="city-logo">Solana Shores</div>
+        <div class="wanted-stars" id="wanted-stars">
+          <span class="star-icon" id="star-1">&#9733;</span>
+          <span class="star-icon" id="star-2">&#9733;</span>
+          <span class="star-icon" id="star-3">&#9733;</span>
+          <span class="star-icon" id="star-4">&#9733;</span>
+          <span class="star-icon" id="star-5">&#9733;</span>
+        </div>
+      </div>
+      <div class="bar-container">
+        <div class="bar-fill health-bar" id="health-bar" style="width: 100%;"></div>
+        <div class="bar-fill armor-bar" id="armor-bar" style="width: 100%;"></div>
+      </div>
+    </div>
+
+    <!-- Top Right -->
+    <div class="hud-top-right">
+      <div class="cash-display" id="cash-val">$2,500</div>
+      <div class="weapon-card">
+        <div class="weapon-name" id="weapon-name">9mm Pistol</div>
+        <div class="ammo-count" id="ammo-val">15 / 60</div>
+      </div>
+    </div>
+
+    <!-- Center Banners & Toasts -->
+    <div class="hud-center">
+      <div class="mission-banner" id="mission-banner">
+        <div class="mission-title" id="mission-title">Mission: Neon Arrival</div>
+        <div class="mission-desc" id="mission-desc">Meet fixer Maya Torres at the Marina docks [180m]</div>
+      </div>
+      <div class="toast-container" id="toast-container"></div>
+    </div>
+
+    <!-- Bottom Left & Right -->
+    <div class="hud-bottom">
+      <div class="minimap-wrapper">
+        <canvas id="minimap-canvas" width="160" height="160"></canvas>
+        <div class="minimap-overlay"></div>
+      </div>
+
+      <div class="speedo-card" id="speedo-card" style="display: none;">
+        <div class="speed-val" id="speed-val">0</div>
+        <div class="speed-unit">MPH</div>
+        <div class="gear-display" id="gear-val">GEAR 1</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Start Screen Overlay -->
+  <div id="start-screen" class="screen-overlay">
+    <div class="title-banner">Solana Shores</div>
+    <div class="title-sub">Vice Syndicate</div>
+    <div class="menu-box">
+      <button class="btn" id="btn-start">Play Game</button>
+      <button class="btn btn-secondary" id="btn-continue" style="display: none;">Continue Saved</button>
+      <button class="btn btn-secondary" id="btn-sound-toggle">Audio: ON</button>
+    </div>
+    <div class="controls-panel">
+      <strong>WASD / Arrows:</strong> Move / Steer &amp; Drive<br>
+      <strong>Mouse:</strong> Look around (Click canvas for Pointer Lock)<br>
+      <strong>Left Click:</strong> Punch (Melee) / Fire Gun<br>
+      <strong>E / F:</strong> Enter / Exit &amp; Hijack Vehicle<br>
+      <strong>Space:</strong> Jump (on foot) / Handbrake Drift (driving)<br>
+      <strong>R:</strong> Reload Pistol | <strong>1 / 2:</strong> Weapon Switch<br>
+      <strong>Esc / P:</strong> Pause &amp; Save Game
+    </div>
+  </div>
+
+  <!-- Pause Screen Overlay -->
+  <div id="pause-screen" class="screen-overlay hidden">
+    <div class="title-banner" style="font-size: 32px;">Game Paused</div>
+    <div class="title-sub" style="font-size: 13px; margin-bottom: 20px;">Solana Shores: Vice Syndicate</div>
+    <div class="menu-box">
+      <button class="btn" id="btn-resume">Resume Game</button>
+      <button class="btn btn-secondary" id="btn-save">Save Progress</button>
+      <button class="btn btn-secondary" id="btn-restart-mission">Restart Mission</button>
+      <button class="btn btn-secondary" id="btn-radio-toggle">Radio Music: ON</button>
+    </div>
+  </div>
+
+  <!-- Wasted / Busted Overlay -->
+  <div id="death-screen" class="screen-overlay hidden">
+    <div id="death-title" class="title-banner">WASTED</div>
+    <div class="title-sub" id="death-sub">Respawning at Solana Memorial Clinic...</div>
+  </div>
+
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
