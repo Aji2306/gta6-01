@@ -7,16 +7,28 @@
 // Outside the grader's container, MAKEFUN_OUTPUT_DIR stands in for /output:
 //   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
 
-import { cpSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { cpSync, existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
+import { isAbsolute, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildDossier } from './vendor/makefun-game.ts';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
-const out = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
+const outEnv = process.env.MAKEFUN_OUTPUT_DIR;
+if (outEnv && !isAbsolute(outEnv)) {
+  throw new Error(`MAKEFUN_OUTPUT_DIR must be an absolute path (received: ${outEnv})`);
+}
+const out = outEnv ?? '/output';
+
+console.log(`[Solana Shores] Building entrypoint: source root = ${here}, output dir = ${out}`);
 
 mkdirSync(out, { recursive: true });
 cpSync(join(here, 'game'), join(out, 'game'), { recursive: true });
+
+const copiedGamePath = join(out, 'game');
+if (!existsSync(copiedGamePath) || readdirSync(copiedGamePath).length === 0) {
+  throw new Error('Error: Copied game/ directory is empty or missing.');
+}
+
 mkdirSync(join(out, 'screenshots'), { recursive: true });
 if (existsSync(join(here, 'screenshots'))) cpSync(join(here, 'screenshots'), join(out, 'screenshots'), { recursive: true });
 

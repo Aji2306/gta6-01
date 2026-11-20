@@ -423,7 +423,7 @@
       margin-bottom: 12px;
     }
 
-    /* Touch controls: shown only on touch devices while playing */
+    /* On-screen touch controller elements: active only for touch pointers during gameplay */
     #touch-controls {
       position: absolute;
       inset: 0;
@@ -503,8 +503,7 @@
       border-radius: 8px;
     }
 
-    /* Small screens / coarse pointers: shrink HUD, move minimap & speedo
-       clear of the joystick (bottom-left) and buttons (bottom-right). */
+    /* Mobile / coarse touch layout adjustments: relocating minimap and speedometer out of touch zone */
     @media (pointer: coarse), (max-width: 700px) {
       #hud {
         padding: 10px;

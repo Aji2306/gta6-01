@@ -135,49 +135,42 @@ export class Player {
   }
 
   updateOnFoot(dt, input) {
-    // Determine movement direction relative to camera yaw
-    let moveX = 0;
-    let moveZ = 0;
+    let axisX = 0;
+    let axisZ = 0;
 
-    if (input.forward) moveZ -= 1;
-    if (input.backward) moveZ += 1;
-    if (input.left) moveX -= 1;
-    if (input.right) moveX += 1;
+    if (input.forward) axisZ -= 1;
+    if (input.backward) axisZ += 1;
+    if (input.left) axisX -= 1;
+    if (input.right) axisX += 1;
 
-    const isMoving = moveX !== 0 || moveZ !== 0;
+    const moving = axisX !== 0 || axisZ !== 0;
 
-    if (isMoving) {
-      // Normalize
-      const len = Math.hypot(moveX, moveZ);
-      moveX /= len;
-      moveZ /= len;
+    if (moving) {
+      const mag = Math.hypot(axisX, axisZ);
+      axisX /= mag;
+      axisZ /= mag;
 
-      // Rotate input by camera yaw: local forward (-Z) must map to the
-      // camera's view direction (sin yaw, cos yaw) and local right (+X)
-      // to screen-right (-cos yaw, sin yaw), so pushing up walks the
-      // player away from the camera (up-screen), not toward it.
-      const cosY = Math.cos(this.camYaw);
-      const sinY = Math.sin(this.camYaw);
-      const worldMoveX = -moveX * cosY - moveZ * sinY;
-      const worldMoveZ = moveX * sinY - moveZ * cosY;
+      // Transform local movement vector into world space relative to camera yaw angle.
+      // Ensuring pushing forward (up) moves the character away from the camera.
+      const cy = Math.cos(this.camYaw);
+      const sy = Math.sin(this.camYaw);
+      const worldX = -axisX * cy - axisZ * sy;
+      const worldZ = axisX * sy - axisZ * cy;
 
-      const speed = input.sprint ? this.runSpeed : this.walkSpeed;
-      this.velocity.x = worldMoveX * speed;
-      this.velocity.z = worldMoveZ * speed;
+      const spd = input.sprint ? this.runSpeed : this.walkSpeed;
+      this.velocity.x = worldX * spd;
+      this.velocity.z = worldZ * spd;
 
-      // Rotate player facing to movement vector
-      this.heading = Math.atan2(worldMoveX, worldMoveZ);
+      this.heading = Math.atan2(worldX, worldZ);
       this.mesh.rotation.y = this.heading;
 
-      // Walk / Run animation
       this.animCycle += dt * (input.sprint ? 14 : 9);
       const swing = Math.sin(this.animCycle) * (input.sprint ? 0.7 : 0.45);
       this.legL.rotation.x = swing;
       this.legR.rotation.x = -swing;
       this.armL.rotation.x = -swing;
-      this.armR.rotation.x = swing * 0.4; // slight swing while holding gun
+      this.armR.rotation.x = swing * 0.4;
 
-      // Footstep audio
       this.stepTimer -= dt;
       if (this.stepTimer <= 0 && this.isGrounded) {
         audio.playFootstep();

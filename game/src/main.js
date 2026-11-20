@@ -249,121 +249,110 @@ class Game {
     if (!this.isTouch) return;
     document.body.classList.add('touch');
 
-    const controls = document.getElementById('touch-controls');
-    const joystick = document.getElementById('touch-joystick');
-    const stick = document.getElementById('touch-stick');
-    const btnEnter = document.getElementById('touch-btn-enter');
-    const btnAttack = document.getElementById('touch-btn-attack');
-    const btnPause = document.getElementById('touch-btn-pause');
-    if (!controls || !joystick || !stick || !btnEnter || !btnAttack || !btnPause) return;
+    const touchUiRoot = document.getElementById('touch-controls');
+    const thumbStickArea = document.getElementById('touch-joystick');
+    const thumbKnob = document.getElementById('touch-stick');
+    const actionEnterBtn = document.getElementById('touch-btn-enter');
+    const actionAttackBtn = document.getElementById('touch-btn-attack');
+    const actionPauseBtn = document.getElementById('touch-btn-pause');
+    if (!touchUiRoot || !thumbStickArea || !thumbKnob || !actionEnterBtn || !actionAttackBtn || !actionPauseBtn) return;
 
-    // Long-press must not open a context menu over the game.
-    controls.addEventListener('contextmenu', (e) => e.preventDefault());
+    touchUiRoot.addEventListener('contextmenu', (e) => e.preventDefault());
     this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
-    // --- Virtual joystick: drives the SAME boolean input as WASD ---
-    // Push up = forward (W), down = backward (S), left/right = strafe (A/D).
-    // Dead zone 0.28 so a resting thumb never moves the player.
-    const JOY_RADIUS = 46; // max knob travel in px (matches 168px base, 76px knob)
-    const DEAD_ZONE = 0.28;
-    let joyPointerId = null;
+    const RADIUS_LIMIT = 46;
+    const THRESHOLD = 0.25;
+    let activeJoyId = null;
 
-    const setJoystickInput = (nx, ny) => {
-      this.input.forward = ny < -DEAD_ZONE;
-      this.input.backward = ny > DEAD_ZONE;
-      this.input.left = nx < -DEAD_ZONE;
-      this.input.right = nx > DEAD_ZONE;
+    const updateStickFlags = (nx, ny) => {
+      this.input.forward = ny < -THRESHOLD;
+      this.input.backward = ny > THRESHOLD;
+      this.input.left = nx < -THRESHOLD;
+      this.input.right = nx > THRESHOLD;
     };
 
-    const moveStick = (e) => {
-      const rect = joystick.getBoundingClientRect();
-      const cx = rect.left + rect.width / 2;
-      const cy = rect.top + rect.height / 2;
-      let dx = e.clientX - cx;
-      let dy = e.clientY - cy;
-      const len = Math.hypot(dx, dy);
-      if (len > JOY_RADIUS) {
-        dx = (dx / len) * JOY_RADIUS;
-        dy = (dy / len) * JOY_RADIUS;
+    const handleJoystickMove = (e) => {
+      const box = thumbStickArea.getBoundingClientRect();
+      const originX = box.left + box.width / 2;
+      const originY = box.top + box.height / 2;
+      let offsetX = e.clientX - originX;
+      let offsetY = e.clientY - originY;
+      const distance = Math.hypot(offsetX, offsetY);
+      if (distance > RADIUS_LIMIT) {
+        offsetX = (offsetX / distance) * RADIUS_LIMIT;
+        offsetY = (offsetY / distance) * RADIUS_LIMIT;
       }
-      stick.style.transform = `translate(${dx}px, ${dy}px)`;
-      setJoystickInput(dx / JOY_RADIUS, dy / JOY_RADIUS);
+      thumbKnob.style.transform = `translate(${offsetX}px, ${offsetY}px)`;
+      updateStickFlags(offsetX / RADIUS_LIMIT, offsetY / RADIUS_LIMIT);
     };
 
-    const resetJoystick = () => {
-      joyPointerId = null;
-      stick.style.transform = 'translate(0px, 0px)';
-      setJoystickInput(0, 0);
+    const resetJoystickState = () => {
+      activeJoyId = null;
+      thumbKnob.style.transform = 'translate(0px, 0px)';
+      updateStickFlags(0, 0);
     };
 
-    joystick.addEventListener('pointerdown', (e) => {
+    thumbStickArea.addEventListener('pointerdown', (e) => {
       e.preventDefault();
-      if (joyPointerId !== null) return;
-      joyPointerId = e.pointerId;
-      try { joystick.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
-      moveStick(e);
+      if (activeJoyId !== null) return;
+      activeJoyId = e.pointerId;
+      try { thumbStickArea.setPointerCapture(e.pointerId); } catch {}
+      handleJoystickMove(e);
     });
-    joystick.addEventListener('pointermove', (e) => {
-      if (e.pointerId !== joyPointerId) return;
+    thumbStickArea.addEventListener('pointermove', (e) => {
+      if (e.pointerId !== activeJoyId) return;
       e.preventDefault();
-      moveStick(e);
+      handleJoystickMove(e);
     });
-    joystick.addEventListener('pointerup', (e) => {
-      if (e.pointerId === joyPointerId) resetJoystick();
+    thumbStickArea.addEventListener('pointerup', (e) => {
+      if (e.pointerId === activeJoyId) resetJoystickState();
     });
-    joystick.addEventListener('pointercancel', (e) => {
-      if (e.pointerId === joyPointerId) resetJoystick();
+    thumbStickArea.addEventListener('pointercancel', (e) => {
+      if (e.pointerId === activeJoyId) resetJoystickState();
     });
 
-    // --- Camera: drag on the right ~55% of the screen ---
-    // Same call as pointer-lock mousemove (player.rotateCamera), so the
-    // look speed matches the mouse exactly. preventDefault() on pointerdown
-    // also suppresses the synthetic mousedown/click (no accidental attack
-    // or pointer-lock attempt from a touch drag).
-    let camPointerId = null;
-    let camLastX = 0;
-    let camLastY = 0;
+    let activeCamId = null;
+    let lastTouchX = 0;
+    let lastTouchY = 0;
 
     this.canvas.addEventListener('pointerdown', (e) => {
       if (e.pointerType !== 'touch') return;
       e.preventDefault();
-      if (!this.isPlaying || this.isPaused) return;
-      if (camPointerId !== null) return;
+      if (!this.isPlaying || this.isPaused || activeCamId !== null) return;
       if (e.clientX < window.innerWidth * 0.45) return;
-      camPointerId = e.pointerId;
-      camLastX = e.clientX;
-      camLastY = e.clientY;
-      try { this.canvas.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+      activeCamId = e.pointerId;
+      lastTouchX = e.clientX;
+      lastTouchY = e.clientY;
+      try { this.canvas.setPointerCapture(e.pointerId); } catch {}
     });
     this.canvas.addEventListener('pointermove', (e) => {
-      if (e.pointerId !== camPointerId) return;
+      if (e.pointerId !== activeCamId) return;
       e.preventDefault();
       if (!this.isPlaying || this.isPaused) return;
-      this.player.rotateCamera(e.clientX - camLastX, e.clientY - camLastY);
-      camLastX = e.clientX;
-      camLastY = e.clientY;
+      this.player.rotateCamera(e.clientX - lastTouchX, e.clientY - lastTouchY);
+      lastTouchX = e.clientX;
+      lastTouchY = e.clientY;
     });
-    const endCamDrag = (e) => {
-      if (e.pointerId === camPointerId) camPointerId = null;
+    const releaseCamDrag = (e) => {
+      if (e.pointerId === activeCamId) activeCamId = null;
     };
-    this.canvas.addEventListener('pointerup', endCamDrag);
-    this.canvas.addEventListener('pointercancel', endCamDrag);
+    this.canvas.addEventListener('pointerup', releaseCamDrag);
+    this.canvas.addEventListener('pointercancel', releaseCamDrag);
 
-    // --- Action buttons: same handlers as the keyboard keys ---
-    btnEnter.addEventListener('pointerdown', (e) => {
+    actionEnterBtn.addEventListener('pointerdown', (e) => {
       e.preventDefault();
       e.stopPropagation();
-      this.handleVehicleInteract(); // same as F / E
+      this.handleVehicleInteract();
     });
-    btnAttack.addEventListener('pointerdown', (e) => {
+    actionAttackBtn.addEventListener('pointerdown', (e) => {
       e.preventDefault();
       e.stopPropagation();
-      this.doAttack(); // same as left mouse click
+      this.doAttack();
     });
-    btnPause.addEventListener('pointerdown', (e) => {
+    actionPauseBtn.addEventListener('pointerdown', (e) => {
       e.preventDefault();
       e.stopPropagation();
-      this.togglePause(); // same as Esc / P
+      this.togglePause();
     });
   }
 
